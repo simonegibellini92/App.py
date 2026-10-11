@@ -7,7 +7,7 @@ st.set_page_config(page_title="Match Analysis Fisica", layout="wide", initial_si
 
 COLOR_1T = '#27ae60'
 COLOR_2T = '#34495e'
-colori_tempi = {'MATCH (1)': COLOR_1T, 'MATCH (2)': COLOR_2T}
+colori_tempi = {'1° Tempo': COLOR_1T, '2° Tempo': COLOR_2T}
 
 URL_FOGLIO_GOOGLE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTzh8377Fpku7ZtWpaCnTSRSiswjlwVcz8UMEDMVJTnq0KQeFXe83jfLStHQ6_4AkNIWRdQcZWXQ4xP/pub?output=csv"
 
@@ -23,6 +23,7 @@ def carica_dati(url):
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip().str.replace(r'\s+', ' ', regex=True)
         
+        # Funzione di pulizia numeri italiani
         def clean_italian_number(val):
             if pd.isna(val):
                 return 0.0
@@ -38,7 +39,7 @@ def carica_dati(url):
                 return 0.0
 
         for col in df.columns:
-            if col not in ['Player First Name', 'Player Last Name', 'Player Position', 'Session Date', 'Drill Title', 'Giocatore']:
+            if col not in ['Custom Player Id', 'Player First Name', 'Player Last Name', 'Player Position', 'Session Date', 'Drill Title', 'Settimana', 'Tipo Sessione', 'Data Pulita']:
                 df[col] = df[col].apply(clean_italian_number)
 
         # Pulizia date
@@ -55,11 +56,20 @@ def carica_dati(url):
             
         df = df[df['Giocatore'] != " "]
 
-        # Filtro flessibile tempi
+        # Filtro flessibile e completo per le partite (prende qualsiasi MATCH o 1T/2T)
         if 'Drill Title' in df.columns:
-            df['Drill Clean'] = df['Drill Title'].astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True)
-            df_match = df[df['Drill Clean'].isin(['MATCH1', 'MATCH2', 'MATCH (1)', 'MATCH (2)'])].copy()
-            df_match['Drill Title'] = df_match['Drill Clean'].apply(lambda x: 'MATCH (1)' if '1' in x else 'MATCH (2)')
+            df['Drill Upper'] = df['Drill Title'].astype(str).str.upper()
+            # Selezioniamo tutte le righe che contengono MATCH o PARTITA
+            df_match = df[df['Drill Upper'].str.contains('MATCH|PARTITA|1|2', na=False)].copy()
+            
+            # Uniformiamo le etichette per i grafici
+            def etichetta_tempo(titolo):
+                if '1' in titolo or 'FIRST' in titolo:
+                    return '1° Tempo'
+                elif '2' in titolo or 'SECOND' in titolo:
+                    return '2° Tempo'
+                return titolo
+            df_match['Drill Title'] = df_match['Drill Upper'].apply(etichetta_tempo)
         else:
             df_match = df.copy()
                 
@@ -74,13 +84,12 @@ st.markdown("---")
 with st.spinner('Sincronizzazione in corso...'):
     df_totale = carica_dati(URL_FOGLIO_GOOGLE)
 
-# --- PANNELLO DI DEBUG (TI MOSTRA COSA LEGGE PYTHON) ---
-with st.expander("🔍 Debug Avanzato (Clicca per aprire)", expanded=False):
-    st.write(f"📊 Righe totali caricate: {len(df_totale)}")
-    st.write(f"📋 Colonne rilevate nel file: {list(df_totale.columns)}")
+# Pannello di debug ridotto a scomparsa
+with st.expander("🔍 Stato del Sistema (Debug)", expanded=False):
+    st.write(f"📊 Righe caricate: {len(df_totale)}")
     if not df_totale.empty:
-        st.write(f"📅 Date uniche trovate: {df_totale['Session Date'].unique() if 'Session Date' in df_totale.columns else 'Colonna mancante'}")
-        st.write(f"👥 Giocatori unici trovati: {df_totale['Giocatore'].unique() if 'Giocatore' in df_totale.columns else 'Colonna mancante'}")
+        st.write(f"📅 Date trovate: {list(df_totale['Session Date'].unique())}")
+        st.write(f"👥 Giocatori trovati: {len(df_totale['Giocatore'].unique())} atleti")
 
 if df_totale.empty:
     st.error("⚠️ Attenzione: Impossibile leggere il Foglio Google o il file è vuoto.")
@@ -100,15 +109,15 @@ else:
             
             st.subheader(f"Report Partita del {data_selezionata}")
             
-            # Ricerca flessibile di TUTTE le colonne chiave
-            col_distanza = next((c for c in df_match.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
-            col_hsr = next((c for c in df_match.columns if 'high speed' in c.lower() or 'hsr' in c.lower() and 'min' not in c.lower()), None)
-            col_speed = next((c for c in df_match.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
-            col_acc = next((c for c in df_match.columns if 'accelerations' in c.lower() or 'accelerazioni' in c.lower()), None)
-            col_dec = next((c for c in df_match.columns if 'deceleration' in c.lower() or 'decelerazioni' in c.lower()), None)
-            col_zone6 = next((c for c in df_match.columns if 'zone 6' in c.lower() or 'z6' in c.lower()), None)
-            col_dist_min = next((c for c in df_match.columns if 'distance per min' in c.lower() or 'distanza al minuto' in c.lower()), None)
-            col_hsr_min = next((c for c in df_match.columns if 'hsr per min' in c.lower() or 'hsr al minuto' in c.lower()), None)
+            # Utilizziamo i nomi esatti delle tue colonne
+            col_distanza = 'Distance Total' if 'Distance Total' in df_match.columns else None
+            col_hsr = 'High Speed Running' if 'High Speed Running' in df_match.columns else None
+            col_speed = 'Max Speed' if 'Max Speed' in df_match.columns else None
+            col_acc = 'Acceleration Z4 to Z6' if 'Acceleration Z4 to Z6' in df_match.columns else None
+            col_dec = 'Deceleration Z4 to Z6' if 'Deceleration Z4 to Z6' in df_match.columns else None
+            col_zone6 = 'Distance Zone 6' if 'Distance Zone 6' in df_match.columns else None
+            col_dist_min = 'Distance Per Minute' if 'Distance Per Minute' in df_match.columns else None
+            col_hsr_min = 'HSR Per Minute' if 'HSR Per Minute' in df_match.columns else None
             
             # --- SEZIONE KPI HIGHLIGHTS ---
             st.markdown("##### 🚀 Top Performers della Partita (Totale 1T+2T)")
@@ -212,14 +221,16 @@ else:
             
             df_giocatore = df_totale[df_totale['Giocatore'] == giocatore_selezionato]
             
-            col_distanza = next((c for c in df_totale.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
-            col_speed = next((c for c in df_totale.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
-            col_hsr = next((c for c in df_totale.columns if 'high speed' in c.lower() or 'hsr' in c.lower() and 'min' not in c.lower()), None)
+            col_distanza = 'Distance Total' if 'Distance Total' in df_totale.columns else None
+            col_speed = 'Max Speed' if 'Max Speed' in df_totale.columns else None
+            col_hsr = 'High Speed Running' if 'High Speed Running' in df_totale.columns else None
+            col_acc = 'Acceleration Z4 to Z6' if 'Acceleration Z4 to Z6' in df_totale.columns else None
             
             aggregazioni = {}
             if col_distanza: aggregazioni[col_distanza] = 'sum'
             if col_hsr: aggregazioni[col_hsr] = 'sum'
             if col_speed: aggregazioni[col_speed] = 'max'
+            if col_acc: aggregazioni[col_acc] = 'sum'
             
             df_raggruppato = df_giocatore.groupby('Session Date').agg(aggregazioni).reset_index()
             df_raggruppato['Data Ordine'] = pd.to_datetime(df_raggruppato['Session Date'], format='%d/%m/%Y', errors='coerce')
