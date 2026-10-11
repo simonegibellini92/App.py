@@ -9,8 +9,21 @@ COLOR_1T = '#27ae60'
 COLOR_2T = '#34495e'
 colori_tempi = {'1° Tempo': COLOR_1T, '2° Tempo': COLOR_2T}
 
-# Configurazione Plotly per evitare blocchi al tocco su smartphone (Scrolling fluido)
-PLOTLY_CONFIG = {'scrollZoom': False, 'displayModeBar': True}
+# Configurazione Plotly ottimizzata per mobile: niente drag accidentale, scrolling fluido e solo tasto download
+PLOTLY_CONFIG = {
+    'displayModeBar': True,
+    'modeBarButtonsToRemove': [
+        'zoom2d', 'pan2d', 'select2d', 'lasso2d', 
+        'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d',
+        'orbitController', 'tableRotation'
+    ],
+    'displaylogo': False,
+    'toImageButtonOptions': {
+        'format': 'png',
+        'filename': 'prestazione_atleta',
+        'scale': 2
+    }
+}
 
 URL_FOGLIO_GOOGLE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTzh8377Fpku7ZtWpaCnTSRSiswjlwVcz8UMEDMVJTnq0KQeFXe83jfLStHQ6_4AkNIWRdQcZWXQ4xP/pub?output=csv"
 
@@ -136,14 +149,14 @@ else:
                 fig_dist = px.bar(df_match, x='Giocatore', y=col_distanza, color='Drill Title', 
                              title="Distanza Totale (metri)", barmode='stack', text_auto='.0f',
                              color_discrete_map=colori_tempi, template="plotly_white")
-                fig_dist.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                fig_dist.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                 st.plotly_chart(fig_dist, use_container_width=True, config=PLOTLY_CONFIG)
 
             if col_hsr:
                 fig_hsr = px.bar(df_match, x='Giocatore', y=col_hsr, color='Drill Title', 
                              title="Corsa ad Alta Velocità (HSR)", barmode='stack', text_auto='.0f',
                              color_discrete_map=colori_tempi, template="plotly_white")
-                fig_hsr.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                fig_hsr.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                 st.plotly_chart(fig_hsr, use_container_width=True, config=PLOTLY_CONFIG)
 
             # --- INTENSITÀ E METRICHE AL MINUTO ---
@@ -155,13 +168,13 @@ else:
                     fig_speed = px.bar(df_match, x='Giocatore', y=col_speed, color='Drill Title', 
                                  title="Velocità Massima (km/h)", barmode='group', text_auto='.1f',
                                  color_discrete_map=colori_tempi, template="plotly_white")
-                    fig_speed.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    fig_speed.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                     st.plotly_chart(fig_speed, use_container_width=True, config=PLOTLY_CONFIG)
                 if col_dist_min:
                     fig_dmin = px.bar(df_match, x='Giocatore', y=col_dist_min, color='Drill Title', 
                                  title="Distanza al Minuto (m/min)", barmode='group', text_auto='.1f',
                                  color_discrete_map=colori_tempi, template="plotly_white")
-                    fig_dmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    fig_dmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                     st.plotly_chart(fig_dmin, use_container_width=True, config=PLOTLY_CONFIG)
                     
             with col_g2:
@@ -169,13 +182,13 @@ else:
                     fig_z6 = px.bar(df_match, x='Giocatore', y=col_zone6, color='Drill Title', 
                                  title="Distanza Zona 6 (Sprint)", barmode='stack', text_auto='.0f',
                                  color_discrete_map=colori_tempi, template="plotly_white")
-                    fig_z6.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    fig_z6.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                     st.plotly_chart(fig_z6, use_container_width=True, config=PLOTLY_CONFIG)
                 if col_hsr_min:
                     fig_hmin = px.bar(df_match, x='Giocatore', y=col_hsr_min, color='Drill Title', 
                                  title="HSR al Minuto", barmode='group', text_auto='.2f',
                                  color_discrete_map=colori_tempi, template="plotly_white")
-                    fig_hmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    fig_hmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                     st.plotly_chart(fig_hmin, use_container_width=True, config=PLOTLY_CONFIG)
 
             # Accelerazioni e Decelerazioni
@@ -187,14 +200,14 @@ else:
                         fig_acc = px.bar(df_match, x='Giocatore', y=col_acc, color='Drill Title', 
                                      title="Accelerazioni (Z4 to Z6)", barmode='stack', text_auto='.0f',
                                      color_discrete_map=colori_tempi, template="plotly_white")
-                        fig_acc.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                        fig_acc.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                         st.plotly_chart(fig_acc, use_container_width=True, config=PLOTLY_CONFIG)
                 with col_a2:
                     if col_dec:
                         fig_dec = px.bar(df_match, x='Giocatore', y=col_dec, color='Drill Title', 
                                      title="Decelerazioni (Z4 to Z6)", barmode='stack', text_auto='.0f',
                                      color_discrete_map=colori_tempi, template="plotly_white")
-                        fig_dec.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                        fig_dec.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None, dragmode=False)
                         st.plotly_chart(fig_dec, use_container_width=True, config=PLOTLY_CONFIG)
         else:
             st.warning("Nessuna data trovata nel database.")
@@ -211,14 +224,14 @@ else:
             
             df_giocatore = df_totale[df_totale['Giocatore'] == giocatore_selezionato]
             
-            col_distanza = 'Distance Total' if 'Distance Total' in df_totale.columns else None
-            col_hsr = 'High Speed Running' if 'High Speed Running' in df_totale.columns else None
-            col_speed = 'Max Speed' if 'Max Speed' in df_totale.columns else None
-            col_acc = 'Acceleration Z4 to Z6' if 'Acceleration Z4 to Z6' in df_totale.columns else None
-            col_dec = 'Deceleration Z4 to Z6' if 'Deceleration Z4 to Z6' in df_totale.columns else None
-            col_zone6 = 'Distance Zone 6' if 'Distance Zone 6' in df_totale.columns else None
-            col_dist_min = 'Distance Per Minute' if 'Distance Per Minute' in df_totale.columns else None
-            col_hsr_min = 'HSR Per Minute' if 'HSR Per Minute' in df_totale.columns else None
+            col_distanza = 'Distance Total' if 'Distance Total' in df_giocatore.columns else None
+            col_hsr = 'High Speed Running' if 'High Speed Running' in df_giocatore.columns else None
+            col_speed = 'Max Speed' if 'Max Speed' in df_giocatore.columns else None
+            col_acc = 'Acceleration Z4 to Z6' if 'Acceleration Z4 to Z6' in df_giocatore.columns else None
+            col_dec = 'Deceleration Z4 to Z6' if 'Deceleration Z4 to Z6' in df_giocatore.columns else None
+            col_zone6 = 'Distance Zone 6' if 'Distance Zone 6' in df_giocatore.columns else None
+            col_dist_min = 'Distance Per Minute' if 'Distance Per Minute' in df_giocatore.columns else None
+            col_hsr_min = 'HSR Per Minute' if 'HSR Per Minute' in df_giocatore.columns else None
 
             # Calcolo dei Record / Migliore Prestazione Stagionale in Partita
             df_match_player = df_giocatore.groupby('Session Date').agg({
@@ -265,50 +278,43 @@ else:
             if col_distanza:
                 fig_storico = px.line(df_raggruppato, x='Session Date', y=col_distanza, markers=True, 
                               title="Andamento Distanza Totale in Partita (m)", template="plotly_white")
-                fig_storico.update_traces(line_color=COLOR_1T, marker=dict(size=10, color=COLOR_2T), line_width=3)
-                fig_storico.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                fig_storico.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita", dragmode=False)
                 st.plotly_chart(fig_storico, use_container_width=True, config=PLOTLY_CONFIG)
 
             if col_hsr:
                 fig_storico_hsr = px.line(df_raggruppato, x='Session Date', y=col_hsr, markers=True, 
                               title="Andamento High Speed Running (m)", template="plotly_white")
-                fig_storico_hsr.update_traces(line_color='#2980b9', marker=dict(size=10, color='#1abc9c'), line_width=3)
-                fig_storico_hsr.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                fig_storico_hsr.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita", dragmode=False)
                 st.plotly_chart(fig_storico_hsr, use_container_width=True, config=PLOTLY_CONFIG)
 
             if col_speed:
                 fig_storico_vel = px.line(df_raggruppato, x='Session Date', y=col_speed, markers=True, 
                               title="Andamento Velocità Massima (km/h)", template="plotly_white")
-                fig_storico_vel.update_traces(line_color='#e74c3c', marker=dict(size=10, color='#c0392b'), line_width=3)
-                fig_storico_vel.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                fig_storico_vel.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita", dragmode=False)
                 st.plotly_chart(fig_storico_vel, use_container_width=True, config=PLOTLY_CONFIG)
 
             if col_zone6:
                 fig_storico_z6 = px.line(df_raggruppato, x='Session Date', y=col_zone6, markers=True, 
                               title="Andamento Distanza Zona 6 (Sprint)", template="plotly_white")
-                fig_storico_z6.update_traces(line_color='#8e44ad', marker=dict(size=10, color='#9b59b6'), line_width=3)
-                fig_storico_z6.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                fig_storico_z6.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita", dragmode=False)
                 st.plotly_chart(fig_storico_z6, use_container_width=True, config=PLOTLY_CONFIG)
 
             if col_dist_min:
                 fig_storico_dmin = px.line(df_raggruppato, x='Session Date', y=col_dist_min, markers=True, 
                               title="Andamento Distanza al Minuto (m/min)", template="plotly_white")
-                fig_storico_dmin.update_traces(line_color='#d35400', marker=dict(size=10, color='#e67e22'), line_width=3)
-                fig_storico_dmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                fig_storico_dmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita", dragmode=False)
                 st.plotly_chart(fig_storico_dmin, use_container_width=True, config=PLOTLY_CONFIG)
 
             if col_acc:
                 fig_storico_acc = px.line(df_raggruppato, x='Session Date', y=col_acc, markers=True, 
                               title="Andamento Accelerazioni", template="plotly_white")
-                fig_storico_acc.update_traces(line_color='#16a085', marker=dict(size=10, color='#1abc9c'), line_width=3)
-                fig_storico_acc.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                fig_storico_acc.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita", dragmode=False)
                 st.plotly_chart(fig_storico_acc, use_container_width=True, config=PLOTLY_CONFIG)
 
             if col_dec:
                 fig_storico_dec = px.line(df_raggruppato, x='Session Date', y=col_dec, markers=True, 
                               title="Andamento Decelerazioni", template="plotly_white")
-                fig_storico_dec.update_traces(line_color='#c0392b', marker=dict(size=10, color='#e74c3c'), line_width=3)
-                fig_storico_dec.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                fig_storico_dec.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita", dragmode=False)
                 st.plotly_chart(fig_storico_dec, use_container_width=True, config=PLOTLY_CONFIG)
         else:
             st.warning("Nessun giocatore trovato nel database.")
