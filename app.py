@@ -13,6 +13,11 @@ colori_tempi = {'MATCH (1)': COLOR_1T, 'MATCH (2)': COLOR_2T}
 # 2. COLLEGAMENTO AL DATABASE (GOOGLE SHEETS)
 URL_FOGLIO_GOOGLE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTzh8377Fpku7ZtWpaCnTSRSiswjlwVcz8UMEDMVJTnq0KQeFXe83jfLStHQ6_4AkNIWRdQcZWXQ4xP/pub?output=csv"
 
+# Pulsante nella barra laterale per pulire la cache e ricaricare i dati freschi da Google
+if st.sidebar.button("🔄 Ricarica Dati da Google Sheets"):
+    st.cache_data.clear()
+    st.rerun()
+
 @st.cache_data(ttl=300)
 def carica_dati(url):
     if "INCOLLA_QUI" in url or not url.startswith("http"):
@@ -20,7 +25,7 @@ def carica_dati(url):
     try:
         df = pd.read_csv(url)
         
-        # Pulizia rigorosa dei nomi delle colonne da spazi multipli o invisibili
+        # Pulizia rigorosa dei nomi delle colonne
         df.columns = df.columns.str.strip().str.replace(r'\s+', ' ', regex=True)
         
         # Funzione di pulizia numeri italiani (es. 4.005,52 -> 4005.52)
@@ -38,21 +43,29 @@ def carica_dati(url):
             except:
                 return 0.0
 
-        # Convertiamo tutte le colonne numeriche in automatico
+        # Conversione automatica colonne numeriche
         for col in df.columns:
             if col not in ['Player First Name', 'Player Last Name', 'Player Position', 'Session Date', 'Drill Title', 'Giocatore']:
                 df[col] = df[col].apply(clean_italian_number)
 
-        # Creazione nome giocatore unendo nome e cognome
+        # Pulizia e creazione nome giocatore
         if 'Player Last Name' in df.columns and 'Player First Name' in df.columns:
-            df['Giocatore'] = df['Player Last Name'].astype(str).str.strip() + " " + df['Player First Name'].astype(str).str.strip()
+            df['Player Last Name'] = df['Player Last Name'].fillna('').astype(str).str.strip()
+            df['Player First Name'] = df['Player First Name'].fillna('').astype(str).str.strip()
+            df['Giocatore'] = df['Player Last Name'] + " " + df['Player First Name']
         else:
-            df['Giocatore'] = "Atleta"
+            df['Giocatore'] = "Atleta Sconosciuto"
+            
+        # Rimuoviamo righe senza nome
+        df = df[df['Giocatore'] != " "]
 
-        # Filtriamo solo le righe delle partite
+        # Filtro intelligente e flessibile per i tempi (gestisce variazioni di spazi/parentesi)
         if 'Drill Title' in df.columns:
-            df['Drill Title'] = df['Drill Title'].astype(str).str.strip()
-            df_match = df[df['Drill Title'].isin(['MATCH (1)', 'MATCH (2)'])].copy()
+            df['Drill Clean'] = df['Drill Title'].astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True)
+            # Accetta MATCH1, MATCH (1), MATCH1, ecc.
+            df_match = df[df['Drill Clean'].isin(['MATCH1', 'MATCH2', 'MATCH (1)', 'MATCH (2)'])].copy()
+            # Uniformiamo l'etichetta grafica per i grafici
+            df_match['Drill Title'] = df_match['Drill Clean'].apply(lambda x: 'MATCH (1)' if '1' in x else 'MATCH (2)')
         else:
             df_match = df.copy()
                 
@@ -84,7 +97,7 @@ else:
             
             st.subheader(f"Report Partita del {data_selezionata}")
             
-            # Ricerca automatica delle colonne chiave nel dataframe
+            # Ricerca automatica colonne
             col_distanza = next((c for c in df_match.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
             col_hsr = next((c for c in df_match.columns if 'high speed' in c.lower() or 'hsr' in c.lower()), None)
             col_speed = next((c for c in df_match.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
@@ -104,11 +117,9 @@ else:
                 with col1:
                     st.metric(label="🏆 Maggior Distanza (m)", value=f"{top_dist[col_distanza]:.0f}", delta=top_dist['Giocatore'], delta_color="off")
                 with col2:
-                    st.metric(label="⚡ Maggior High Speed Run (m)", value=f"{top_hsr[col_hsr]:.0f}", delta=top_hsr['Giocatore'], delta_color="off")
+                    st.metric(label="⚡ High Speed Run (m)", value=f"{top_hsr[col_hsr]:.0f}", delta=top_hsr['Giocatore'], delta_color="off")
                 with col3:
                     st.metric(label="🏎️ Picco di Velocità (km/h)", value=f"{top_speed[col_speed]:.1f}", delta=top_speed['Giocatore'], delta_color="off")
-            else:
-                st.info("Verifica i nomi delle colonne nel file.")
                     
             st.markdown("---")
             
