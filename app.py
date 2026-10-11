@@ -41,10 +41,11 @@ def carica_dati(url):
             if col not in ['Player First Name', 'Player Last Name', 'Player Position', 'Session Date', 'Drill Title', 'Giocatore']:
                 df[col] = df[col].apply(clean_italian_number)
 
-        # Pulizia rigorosa delle date per evitare disallineamenti
+        # Pulizia date
         if 'Session Date' in df.columns:
             df['Session Date'] = df['Session Date'].astype(str).str.strip()
 
+        # Creazione nome giocatore
         if 'Player Last Name' in df.columns and 'Player First Name' in df.columns:
             df['Player Last Name'] = df['Player Last Name'].fillna('').astype(str).str.strip()
             df['Player First Name'] = df['Player First Name'].fillna('').astype(str).str.strip()
@@ -54,6 +55,7 @@ def carica_dati(url):
             
         df = df[df['Giocatore'] != " "]
 
+        # Filtro flessibile tempi
         if 'Drill Title' in df.columns:
             df['Drill Clean'] = df['Drill Title'].astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True)
             df_match = df[df['Drill Clean'].isin(['MATCH1', 'MATCH2', 'MATCH (1)', 'MATCH (2)'])].copy()
@@ -72,6 +74,14 @@ st.markdown("---")
 with st.spinner('Sincronizzazione in corso...'):
     df_totale = carica_dati(URL_FOGLIO_GOOGLE)
 
+# --- PANNELLO DI DEBUG (TI MOSTRA COSA LEGGE PYTHON) ---
+with st.expander("🔍 Debug Avanzato (Clicca per aprire)", expanded=False):
+    st.write(f"📊 Righe totali caricate: {len(df_totale)}")
+    st.write(f"📋 Colonne rilevate nel file: {list(df_totale.columns)}")
+    if not df_totale.empty:
+        st.write(f"📅 Date uniche trovate: {df_totale['Session Date'].unique() if 'Session Date' in df_totale.columns else 'Colonna mancante'}")
+        st.write(f"👥 Giocatori unici trovati: {df_totale['Giocatore'].unique() if 'Giocatore' in df_totale.columns else 'Colonna mancante'}")
+
 if df_totale.empty:
     st.error("⚠️ Attenzione: Impossibile leggere il Foglio Google o il file è vuoto.")
 else:
@@ -86,18 +96,19 @@ else:
         if len(date_disponibili) > 0:
             data_selezionata = st.sidebar.selectbox("Scegli la data della partita:", date_disponibili, index=len(date_disponibili)-1)
             
-            # FILTRO PERFETTO PER LA DATA SELEZIONATA
             df_match = df_totale[df_totale['Session Date'] == data_selezionata].copy()
             
             st.subheader(f"Report Partita del {data_selezionata}")
             
-            # Identificazione colonne chiave
+            # Ricerca flessibile di TUTTE le colonne chiave
             col_distanza = next((c for c in df_match.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
-            col_hsr = next((c for c in df_match.columns if 'high speed' in c.lower() or 'hsr' in c.lower()), None)
+            col_hsr = next((c for c in df_match.columns if 'high speed' in c.lower() or 'hsr' in c.lower() and 'min' not in c.lower()), None)
             col_speed = next((c for c in df_match.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
             col_acc = next((c for c in df_match.columns if 'accelerations' in c.lower() or 'accelerazioni' in c.lower()), None)
             col_dec = next((c for c in df_match.columns if 'deceleration' in c.lower() or 'decelerazioni' in c.lower()), None)
             col_zone6 = next((c for c in df_match.columns if 'zone 6' in c.lower() or 'z6' in c.lower()), None)
+            col_dist_min = next((c for c in df_match.columns if 'distance per min' in c.lower() or 'distanza al minuto' in c.lower()), None)
+            col_hsr_min = next((c for c in df_match.columns if 'hsr per min' in c.lower() or 'hsr al minuto' in c.lower()), None)
             
             # --- SEZIONE KPI HIGHLIGHTS ---
             st.markdown("##### 🚀 Top Performers della Partita (Totale 1T+2T)")
@@ -136,8 +147,8 @@ else:
                 fig_hsr.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
                 st.plotly_chart(fig_hsr, use_container_width=True)
 
-            # --- GRAFICI DI INTENSITÀ E METRICHE EXTRA ---
-            st.markdown("### ⚡ Intensità e Sprint")
+            # --- INTENSITÀ E METRICHE AL MINUTO ---
+            st.markdown("### ⚡ Intensità e Metriche al Minuto")
             col_g1, col_g2 = st.columns(2)
             
             with col_g1:
@@ -147,6 +158,12 @@ else:
                                  color_discrete_map=colori_tempi, template="plotly_white")
                     fig_speed.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
                     st.plotly_chart(fig_speed, use_container_width=True)
+                if col_dist_min:
+                    fig_dmin = px.bar(df_match, x='Giocatore', y=col_dist_min, color='Drill Title', 
+                                 title="Distanza al Minuto (m/min)", barmode='group', text_auto='.1f',
+                                 color_discrete_map=colori_tempi, template="plotly_white")
+                    fig_dmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    st.plotly_chart(fig_dmin, use_container_width=True)
                     
             with col_g2:
                 if col_zone6:
@@ -155,22 +172,28 @@ else:
                                  color_discrete_map=colori_tempi, template="plotly_white")
                     fig_z6.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
                     st.plotly_chart(fig_z6, use_container_width=True)
+                if col_hsr_min:
+                    fig_hmin = px.bar(df_match, x='Giocatore', y=col_hsr_min, color='Drill Title', 
+                                 title="HSR al Minuto", barmode='group', text_auto='.2f',
+                                 color_discrete_map=colori_tempi, template="plotly_white")
+                    fig_hmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    st.plotly_chart(fig_hmin, use_container_width=True)
 
             # Accelerazioni e Decelerazioni
             if col_acc or col_dec:
-                st.markdown("### 🔄 Accelerazioni e Decelerazioni ad Alta Intensità")
+                st.markdown("### 🔄 Accelerazioni e Decelerazioni")
                 col_a1, col_a2 = st.columns(2)
                 with col_a1:
                     if col_acc:
                         fig_acc = px.bar(df_match, x='Giocatore', y=col_acc, color='Drill Title', 
-                                     title="Accelerazioni", barmode='stack', text_auto='.0f',
+                                     title="Accelerazioni (Z4 to Z6)", barmode='stack', text_auto='.0f',
                                      color_discrete_map=colori_tempi, template="plotly_white")
                         fig_acc.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
                         st.plotly_chart(fig_acc, use_container_width=True)
                 with col_a2:
                     if col_dec:
                         fig_dec = px.bar(df_match, x='Giocatore', y=col_dec, color='Drill Title', 
-                                     title="Decelerazioni", barmode='stack', text_auto='.0f',
+                                     title="Decelerazioni (Z4 to Z6)", barmode='stack', text_auto='.0f',
                                      color_discrete_map=colori_tempi, template="plotly_white")
                         fig_dec.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
                         st.plotly_chart(fig_dec, use_container_width=True)
@@ -191,7 +214,7 @@ else:
             
             col_distanza = next((c for c in df_totale.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
             col_speed = next((c for c in df_totale.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
-            col_hsr = next((c for c in df_totale.columns if 'high speed' in c.lower() or 'hsr' in c.lower()), None)
+            col_hsr = next((c for c in df_totale.columns if 'high speed' in c.lower() or 'hsr' in c.lower() and 'min' not in c.lower()), None)
             
             aggregazioni = {}
             if col_distanza: aggregazioni[col_distanza] = 'sum'
