@@ -11,7 +11,8 @@ colori_tempi = {'1° Tempo': COLOR_1T, '2° Tempo': COLOR_2T}
 
 URL_FOGLIO_GOOGLE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTzh8377Fpku7ZtWpaCnTSRSiswjlwVcz8UMEDMVJTnq0KQeFXe83jfLStHQ6_4AkNIWRdQcZWXQ4xP/pub?output=csv"
 
-if st.sidebar.button("🔄 Ricarica Dati da Google Sheets"):
+# Pulsante di ricarica rapida nella barra laterale
+if st.sidebar.button("🔄 Aggiorna Dati"):
     st.cache_data.clear()
     st.rerun()
 
@@ -23,7 +24,6 @@ def carica_dati(url):
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip().str.replace(r'\s+', ' ', regex=True)
         
-        # Funzione di pulizia numeri italiani
         def clean_italian_number(val):
             if pd.isna(val):
                 return 0.0
@@ -42,11 +42,9 @@ def carica_dati(url):
             if col not in ['Custom Player Id', 'Player First Name', 'Player Last Name', 'Player Position', 'Session Date', 'Drill Title', 'Settimana', 'Tipo Sessione', 'Data Pulita']:
                 df[col] = df[col].apply(clean_italian_number)
 
-        # Pulizia date
         if 'Session Date' in df.columns:
             df['Session Date'] = df['Session Date'].astype(str).str.strip()
 
-        # Creazione nome giocatore
         if 'Player Last Name' in df.columns and 'Player First Name' in df.columns:
             df['Player Last Name'] = df['Player Last Name'].fillna('').astype(str).str.strip()
             df['Player First Name'] = df['Player First Name'].fillna('').astype(str).str.strip()
@@ -56,13 +54,10 @@ def carica_dati(url):
             
         df = df[df['Giocatore'] != " "]
 
-        # Filtro flessibile e completo per le partite (prende qualsiasi MATCH o 1T/2T)
         if 'Drill Title' in df.columns:
             df['Drill Upper'] = df['Drill Title'].astype(str).str.upper()
-            # Selezioniamo tutte le righe che contengono MATCH o PARTITA
             df_match = df[df['Drill Upper'].str.contains('MATCH|PARTITA|1|2', na=False)].copy()
             
-            # Uniformiamo le etichette per i grafici
             def etichetta_tempo(titolo):
                 if '1' in titolo or 'FIRST' in titolo:
                     return '1° Tempo'
@@ -84,13 +79,6 @@ st.markdown("---")
 with st.spinner('Sincronizzazione in corso...'):
     df_totale = carica_dati(URL_FOGLIO_GOOGLE)
 
-# Pannello di debug ridotto a scomparsa
-with st.expander("🔍 Stato del Sistema (Debug)", expanded=False):
-    st.write(f"📊 Righe caricate: {len(df_totale)}")
-    if not df_totale.empty:
-        st.write(f"📅 Date trovate: {list(df_totale['Session Date'].unique())}")
-        st.write(f"👥 Giocatori trovati: {len(df_totale['Giocatore'].unique())} atleti")
-
 if df_totale.empty:
     st.error("⚠️ Attenzione: Impossibile leggere il Foglio Google o il file è vuoto.")
 else:
@@ -109,7 +97,6 @@ else:
             
             st.subheader(f"Report Partita del {data_selezionata}")
             
-            # Utilizziamo i nomi esatti delle tue colonne
             col_distanza = 'Distance Total' if 'Distance Total' in df_match.columns else None
             col_hsr = 'High Speed Running' if 'High Speed Running' in df_match.columns else None
             col_speed = 'Max Speed' if 'Max Speed' in df_match.columns else None
@@ -222,20 +209,56 @@ else:
             df_giocatore = df_totale[df_totale['Giocatore'] == giocatore_selezionato]
             
             col_distanza = 'Distance Total' if 'Distance Total' in df_totale.columns else None
-            col_speed = 'Max Speed' if 'Max Speed' in df_totale.columns else None
             col_hsr = 'High Speed Running' if 'High Speed Running' in df_totale.columns else None
+            col_speed = 'Max Speed' if 'Max Speed' in df_totale.columns else None
             col_acc = 'Acceleration Z4 to Z6' if 'Acceleration Z4 to Z6' in df_totale.columns else None
+            col_dec = 'Deceleration Z4 to Z6' if 'Deceleration Z4 to Z6' in df_totale.columns else None
+            col_zone6 = 'Distance Zone 6' if 'Distance Zone 6' in df_totale.columns else None
+            col_dist_min = 'Distance Per Minute' if 'Distance Per Minute' in df_totale.columns else None
+            col_hsr_min = 'HSR Per Minute' if 'HSR Per Minute' in df_totale.columns else None
+
+            # Calcolo dei Record / Migliore Prestazione Stagionale in Partita
+            df_match_player = df_giocatore.groupby('Session Date').agg({
+                col_distanza: 'sum' if col_distanza else 'first',
+                col_hsr: 'sum' if col_hsr else 'first',
+                col_speed: 'max' if col_speed else 'first'
+            }).reset_index()
+
+            st.markdown("##### 🌟 Migliore Prestazione Stagionale")
+            bc1, bc2, bc3 = st.columns(3)
             
+            if not df_match_player.empty:
+                if col_distanza:
+                    best_dist = df_match_player.loc[df_match_player[col_distanza].idxmax()]
+                    with bc1:
+                        st.metric(label="🏆 Record Distanza", value=f"{best_dist[col_distanza]:.0f} m", delta=f"Data: {best_dist['Session Date']}", delta_color="off")
+                if col_hsr:
+                    best_hsr = df_match_player.loc[df_match_player[col_hsr].idxmax()]
+                    with bc2:
+                        st.metric(label="⚡ Record HSR", value=f"{best_hsr[col_hsr]:.0f} m", delta=f"Data: {best_hsr['Session Date']}", delta_color="off")
+                if col_speed:
+                    best_spd = df_match_player.loc[df_match_player[col_speed].idxmax()]
+                    with bc3:
+                        st.metric(label="🏎️ Record Velocità Max", value=f"{best_spd[col_speed]:.1f} km/h", delta=f"Data: {best_spd['Session Date']}", delta_color="off")
+
+            st.markdown("---")
+            
+            # Aggregazioni per i grafici temporali
             aggregazioni = {}
             if col_distanza: aggregazioni[col_distanza] = 'sum'
             if col_hsr: aggregazioni[col_hsr] = 'sum'
             if col_speed: aggregazioni[col_speed] = 'max'
             if col_acc: aggregazioni[col_acc] = 'sum'
+            if col_dec: aggregazioni[col_dec] = 'sum'
+            if col_zone6: aggregazioni[col_zone6] = 'sum'
+            if col_dist_min: aggregazioni[col_dist_min] = 'mean'
+            if col_hsr_min: aggregazioni[col_hsr_min] = 'mean'
             
             df_raggruppato = df_giocatore.groupby('Session Date').agg(aggregazioni).reset_index()
             df_raggruppato['Data Ordine'] = pd.to_datetime(df_raggruppato['Session Date'], format='%d/%m/%Y', errors='coerce')
             df_raggruppato = df_raggruppato.sort_values('Data Ordine')
             
+            # Grafici Storici Completi
             if col_distanza:
                 fig_storico = px.line(df_raggruppato, x='Session Date', y=col_distanza, markers=True, 
                               title="Andamento Distanza Totale in Partita (m)", template="plotly_white")
@@ -256,5 +279,33 @@ else:
                 fig_storico_vel.update_traces(line_color='#e74c3c', marker=dict(size=10, color='#c0392b'), line_width=3)
                 fig_storico_vel.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
                 st.plotly_chart(fig_storico_vel, use_container_width=True)
+
+            if col_zone6:
+                fig_storico_z6 = px.line(df_raggruppato, x='Session Date', y=col_zone6, markers=True, 
+                              title="Andamento Distanza Zona 6 (Sprint)", template="plotly_white")
+                fig_storico_z6.update_traces(line_color='#8e44ad', marker=dict(size=10, color='#9b59b6'), line_width=3)
+                fig_storico_z6.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                st.plotly_chart(fig_storico_z6, use_container_width=True)
+
+            if col_dist_min:
+                fig_storico_dmin = px.line(df_raggruppato, x='Session Date', y=col_dist_min, markers=True, 
+                              title="Andamento Distanza al Minuto (m/min)", template="plotly_white")
+                fig_storico_dmin.update_traces(line_color='#d35400', marker=dict(size=10, color='#e67e22'), line_width=3)
+                fig_storico_dmin.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                st.plotly_chart(fig_storico_dmin, use_container_width=True)
+
+            if col_acc:
+                fig_storico_acc = px.line(df_raggruppato, x='Session Date', y=col_acc, markers=True, 
+                              title="Andamento Accelerazioni", template="plotly_white")
+                fig_storico_acc.update_traces(line_color='#16a085', marker=dict(size=10, color='#1abc9c'), line_width=3)
+                fig_storico_acc.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                st.plotly_chart(fig_storico_acc, use_container_width=True)
+
+            if col_dec:
+                fig_storico_dec = px.line(df_raggruppato, x='Session Date', y=col_dec, markers=True, 
+                              title="Andamento Decelerazioni", template="plotly_white")
+                fig_storico_dec.update_traces(line_color='#c0392b', marker=dict(size=10, color='#e74c3c'), line_width=3)
+                fig_storico_dec.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                st.plotly_chart(fig_storico_dec, use_container_width=True)
         else:
             st.warning("Nessun giocatore trovato nel database.")
