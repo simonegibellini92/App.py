@@ -11,12 +11,11 @@ colori_tempi = {'MATCH (1)': COLOR_1T, 'MATCH (2)': COLOR_2T}
 
 URL_FOGLIO_GOOGLE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTzh8377Fpku7ZtWpaCnTSRSiswjlwVcz8UMEDMVJTnq0KQeFXe83jfLStHQ6_4AkNIWRdQcZWXQ4xP/pub?output=csv"
 
-# Pulsante per forzare il ricaricamento dei dati
 if st.sidebar.button("🔄 Ricarica Dati da Google Sheets"):
     st.cache_data.clear()
     st.rerun()
 
-@st.cache_data(ttl=60) # Ridotto a 60 secondi per test immediato
+@st.cache_data(ttl=300)
 def carica_dati(url):
     if "INCOLLA_QUI" in url or not url.startswith("http"):
         return pd.DataFrame()
@@ -41,6 +40,10 @@ def carica_dati(url):
         for col in df.columns:
             if col not in ['Player First Name', 'Player Last Name', 'Player Position', 'Session Date', 'Drill Title', 'Giocatore']:
                 df[col] = df[col].apply(clean_italian_number)
+
+        # Pulizia rigorosa delle date per evitare disallineamenti
+        if 'Session Date' in df.columns:
+            df['Session Date'] = df['Session Date'].astype(str).str.strip()
 
         if 'Player Last Name' in df.columns and 'Player First Name' in df.columns:
             df['Player Last Name'] = df['Player Last Name'].fillna('').astype(str).str.strip()
@@ -69,15 +72,6 @@ st.markdown("---")
 with st.spinner('Sincronizzazione in corso...'):
     df_totale = carica_dati(URL_FOGLIO_GOOGLE)
 
-# --- PANNELLO DIAGNOSTICO (Ti dice esattamente cosa sta leggendo l'app) ---
-with st.expander("🛠️ Pannello di Controllo / Diagnostica Dati", expanded=True):
-    st.write(f"📊 **Righe totali lette dal Foglio Google:** `{len(df_totale)}`")
-    if not df_totale.empty and 'Session Date' in df_totale.columns:
-        date_trovate = df_totale['Session Date'].dropna().unique()
-        st.write(f"📅 **Date delle partite trovate nell'app:** {list(date_trovate)}")
-    else:
-        st.warning("⚠️ Nessuna colonna 'Session Date' trovata o dataframe vuoto.")
-
 if df_totale.empty:
     st.error("⚠️ Attenzione: Impossibile leggere il Foglio Google o il file è vuoto.")
 else:
@@ -86,20 +80,28 @@ else:
     # --- PAGINA 1: SINGOLA PARTITA ---
     if pagina == "📊 Analisi Singola Partita":
         st.sidebar.markdown("### Selezione Partita")
+        
         date_disponibili = sorted(df_totale['Session Date'].dropna().unique()) if 'Session Date' in df_totale.columns else []
         
         if len(date_disponibili) > 0:
             data_selezionata = st.sidebar.selectbox("Scegli la data della partita:", date_disponibili, index=len(date_disponibili)-1)
-            df_match = df_totale[df_totale['Session Date'] == data_selezionata]
+            
+            # FILTRO PERFETTO PER LA DATA SELEZIONATA
+            df_match = df_totale[df_totale['Session Date'] == data_selezionata].copy()
             
             st.subheader(f"Report Partita del {data_selezionata}")
             
+            # Identificazione colonne chiave
             col_distanza = next((c for c in df_match.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
             col_hsr = next((c for c in df_match.columns if 'high speed' in c.lower() or 'hsr' in c.lower()), None)
             col_speed = next((c for c in df_match.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
+            col_acc = next((c for c in df_match.columns if 'accelerations' in c.lower() or 'accelerazioni' in c.lower()), None)
+            col_dec = next((c for c in df_match.columns if 'deceleration' in c.lower() or 'decelerazioni' in c.lower()), None)
+            col_zone6 = next((c for c in df_match.columns if 'zone 6' in c.lower() or 'z6' in c.lower()), None)
             
+            # --- SEZIONE KPI HIGHLIGHTS ---
             st.markdown("##### 🚀 Top Performers della Partita (Totale 1T+2T)")
-            col1, col2, col3 = st.columns(3)
+            c1, c2, c3 = st.columns(3)
             
             if col_distanza and col_hsr and col_speed:
                 df_somma_giocatori = df_match.groupby('Giocatore')[[col_distanza, col_hsr]].sum().reset_index()
@@ -109,17 +111,18 @@ else:
                 df_max_speed = df_match.groupby('Giocatore')[col_speed].max().reset_index()
                 top_speed = df_max_speed.loc[df_max_speed[col_speed].idxmax()]
                 
-                with col1:
+                with c1:
                     st.metric(label="🏆 Maggior Distanza (m)", value=f"{top_dist[col_distanza]:.0f}", delta=top_dist['Giocatore'], delta_color="off")
-                with col2:
+                with c2:
                     st.metric(label="⚡ High Speed Run (m)", value=f"{top_hsr[col_hsr]:.0f}", delta=top_hsr['Giocatore'], delta_color="off")
-                with col3:
+                with c3:
                     st.metric(label="🏎️ Picco di Velocità (km/h)", value=f"{top_speed[col_speed]:.1f}", delta=top_speed['Giocatore'], delta_color="off")
                     
             st.markdown("---")
             
+            # --- GRAFICI DI VOLUME ---
             if col_distanza:
-                st.markdown("### 📊 Analisi Volumi (Somma 1T + 2T)")
+                st.markdown("### 📊 Volumi di Lavoro")
                 fig_dist = px.bar(df_match, x='Giocatore', y=col_distanza, color='Drill Title', 
                              title="Distanza Totale (metri)", barmode='stack', text_auto='.0f',
                              color_discrete_map=colori_tempi, template="plotly_white")
@@ -128,18 +131,49 @@ else:
 
             if col_hsr:
                 fig_hsr = px.bar(df_match, x='Giocatore', y=col_hsr, color='Drill Title', 
-                             title="Corsa ad Alta Velocità", barmode='stack', text_auto='.0f',
+                             title="Corsa ad Alta Velocità (HSR)", barmode='stack', text_auto='.0f',
                              color_discrete_map=colori_tempi, template="plotly_white")
                 fig_hsr.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
                 st.plotly_chart(fig_hsr, use_container_width=True)
 
-            if col_speed:
-                st.markdown("### ⚡ Analisi Intensità (Confronto Diretto)")
-                fig_speed = px.bar(df_match, x='Giocatore', y=col_speed, color='Drill Title', 
-                             title="Velocità Massima (km/h)", barmode='group', text_auto='.1f',
-                             color_discrete_map=colori_tempi, template="plotly_white")
-                fig_speed.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
-                st.plotly_chart(fig_speed, use_container_width=True)
+            # --- GRAFICI DI INTENSITÀ E METRICHE EXTRA ---
+            st.markdown("### ⚡ Intensità e Sprint")
+            col_g1, col_g2 = st.columns(2)
+            
+            with col_g1:
+                if col_speed:
+                    fig_speed = px.bar(df_match, x='Giocatore', y=col_speed, color='Drill Title', 
+                                 title="Velocità Massima (km/h)", barmode='group', text_auto='.1f',
+                                 color_discrete_map=colori_tempi, template="plotly_white")
+                    fig_speed.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    st.plotly_chart(fig_speed, use_container_width=True)
+                    
+            with col_g2:
+                if col_zone6:
+                    fig_z6 = px.bar(df_match, x='Giocatore', y=col_zone6, color='Drill Title', 
+                                 title="Distanza Zona 6 (Sprint)", barmode='stack', text_auto='.0f',
+                                 color_discrete_map=colori_tempi, template="plotly_white")
+                    fig_z6.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                    st.plotly_chart(fig_z6, use_container_width=True)
+
+            # Accelerazioni e Decelerazioni
+            if col_acc or col_dec:
+                st.markdown("### 🔄 Accelerazioni e Decelerazioni ad Alta Intensità")
+                col_a1, col_a2 = st.columns(2)
+                with col_a1:
+                    if col_acc:
+                        fig_acc = px.bar(df_match, x='Giocatore', y=col_acc, color='Drill Title', 
+                                     title="Accelerazioni", barmode='stack', text_auto='.0f',
+                                     color_discrete_map=colori_tempi, template="plotly_white")
+                        fig_acc.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                        st.plotly_chart(fig_acc, use_container_width=True)
+                with col_a2:
+                    if col_dec:
+                        fig_dec = px.bar(df_match, x='Giocatore', y=col_dec, color='Drill Title', 
+                                     title="Decelerazioni", barmode='stack', text_auto='.0f',
+                                     color_discrete_map=colori_tempi, template="plotly_white")
+                        fig_dec.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title=None)
+                        st.plotly_chart(fig_dec, use_container_width=True)
         else:
             st.warning("Nessuna data trovata nel database.")
 
@@ -157,13 +191,14 @@ else:
             
             col_distanza = next((c for c in df_totale.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
             col_speed = next((c for c in df_totale.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
+            col_hsr = next((c for c in df_totale.columns if 'high speed' in c.lower() or 'hsr' in c.lower()), None)
             
             aggregazioni = {}
             if col_distanza: aggregazioni[col_distanza] = 'sum'
+            if col_hsr: aggregazioni[col_hsr] = 'sum'
             if col_speed: aggregazioni[col_speed] = 'max'
             
             df_raggruppato = df_giocatore.groupby('Session Date').agg(aggregazioni).reset_index()
-            
             df_raggruppato['Data Ordine'] = pd.to_datetime(df_raggruppato['Session Date'], format='%d/%m/%Y', errors='coerce')
             df_raggruppato = df_raggruppato.sort_values('Data Ordine')
             
@@ -173,6 +208,13 @@ else:
                 fig_storico.update_traces(line_color=COLOR_1T, marker=dict(size=10, color=COLOR_2T), line_width=3)
                 fig_storico.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
                 st.plotly_chart(fig_storico, use_container_width=True)
+
+            if col_hsr:
+                fig_storico_hsr = px.line(df_raggruppato, x='Session Date', y=col_hsr, markers=True, 
+                              title="Andamento High Speed Running (m)", template="plotly_white")
+                fig_storico_hsr.update_traces(line_color='#2980b9', marker=dict(size=10, color='#1abc9c'), line_width=3)
+                fig_storico_hsr.update_layout(plot_bgcolor='rgba(0,0,0,0)', yaxis_title=None, xaxis_title="Data Partita")
+                st.plotly_chart(fig_storico_hsr, use_container_width=True)
 
             if col_speed:
                 fig_storico_vel = px.line(df_raggruppato, x='Session Date', y=col_speed, markers=True, 
