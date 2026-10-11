@@ -18,28 +18,43 @@ def carica_dati(url):
     if "INCOLLA_QUI" in url or not url.startswith("http"):
         return pd.DataFrame()
     try:
+        # Leggiamo il CSV
         df = pd.read_csv(url)
         
-        # PULIZIA FONDAMENTALE: Rimuove spazi vuoti invisibili nei nomi delle colonne causati dal copia-incolla
+        # Pulizia spazi nei nomi delle colonne
         df.columns = df.columns.str.strip()
         
-        # Creiamo il nome completo pulito
+        # Conversione dei campi numerici formattati all'italiana (es. 4.005,52 -> 4005.52)
+        cols_da_convertire = [
+            'Distance Total', 'Distance Per Min', 'High Speed Running (Absolute)', 
+            'HSR Per Minute (Absolute)', 'Distance Zone 6 (Absolute)', 'Max Speed'
+        ]
+        
+        for col in cols_da_convertire:
+            if col in df.columns:
+                # Se la colonna è di tipo testo con punti e virgole, puliamo e convertiamo
+                if df[col].dtype == object:
+                    df[col] = df[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+        # Pulizia delle altre colonne numeriche intere
+        cols_intere = ['Accelerations Z4 to Z6', 'Deceleration Z4 to Z6']
+        for col in cols_intere:
+            if col in df.columns:
+                if df[col].dtype == object:
+                    df[col] = df[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+
+        # Creazione nome completo giocatore pulito
         df['Giocatore'] = df['Player Last Name'].astype(str).str.strip() + " " + df['Player First Name'].astype(str).str.strip()
         
-        # Teniamo solo le righe delle partite (pulendo eventuali spazi nei titoli)
+        # Filtriamo solo le righe delle partite
         df['Drill Title'] = df['Drill Title'].astype(str).str.strip()
         df_match = df[df['Drill Title'].isin(['MATCH (1)', 'MATCH (2)'])].copy()
-        
-        # Assicuriamoci che i campi numerici siano effettivamente numeri
-        cols_numeriche = ['Distance Total', 'High Speed Running (Absolute)', 'Max Speed', 
-                          'Distance Zone 6 (Absolute)', 'Accelerations Z4 to Z6', 'Deceleration Z4 to Z6']
-        for col in cols_numeriche:
-            if col in df_match.columns:
-                df_match[col] = pd.to_numeric(df_match[col], errors='coerce').fillna(0)
                 
         return df_match
     except Exception as e:
-        st.error(f"Errore di lettura: {e}")
+        st.error(f"Errore durante l'elaborazione dei dati: {e}")
         return pd.DataFrame()
 
 st.title("⚽ Dashboard Performance Fisica")
@@ -50,7 +65,7 @@ with st.spinner('Sincronizzazione database in corso...'):
     df_totale = carica_dati(URL_FOGLIO_GOOGLE)
 
 if df_totale.empty:
-    st.error("⚠️ Attenzione: Impossibile leggere il Foglio Google o il foglio è vuoto. Verifica il link.")
+    st.error("⚠️ Attenzione: Impossibile leggere il Foglio Google o il file è vuoto.")
 else:
     pagina = st.sidebar.radio("Navigazione", ["📊 Analisi Singola Partita", "📈 Storico Stagionale"])
 
@@ -58,9 +73,12 @@ else:
     if pagina == "📊 Analisi Singola Partita":
         st.sidebar.markdown("### Selezione Partita")
         
+        # Mostriamo tutte le date disponibili in ordine
         date_disponibili = sorted(df_totale['Session Date'].dropna().unique())
+        
         if len(date_disponibili) > 0:
-            data_selezionata = st.sidebar.selectbox("Scegli la data della partita:", date_disponibili)
+            # Di default selezioniamo l'ultima partita inserita (la più recente)
+            data_selezionata = st.sidebar.selectbox("Scegli la data della partita:", date_disponibili, index=len(date_disponibili)-1)
             
             df_match = df_totale[df_totale['Session Date'] == data_selezionata]
             
