@@ -2,33 +2,28 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. SETUP PAGINA (Design Premium)
+# 1. SETUP PAGINA
 st.set_page_config(page_title="Match Analysis Fisica", layout="wide", initial_sidebar_state="expanded")
 
-# Colori sociali (Verde e Grigio scuro per il contrasto)
 COLOR_1T = '#27ae60'
 COLOR_2T = '#34495e'
 colori_tempi = {'MATCH (1)': COLOR_1T, 'MATCH (2)': COLOR_2T}
 
-# 2. COLLEGAMENTO AL DATABASE (GOOGLE SHEETS)
 URL_FOGLIO_GOOGLE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTzh8377Fpku7ZtWpaCnTSRSiswjlwVcz8UMEDMVJTnq0KQeFXe83jfLStHQ6_4AkNIWRdQcZWXQ4xP/pub?output=csv"
 
-# Pulsante nella barra laterale per pulire la cache e ricaricare i dati freschi da Google
+# Pulsante per forzare il ricaricamento dei dati
 if st.sidebar.button("🔄 Ricarica Dati da Google Sheets"):
     st.cache_data.clear()
     st.rerun()
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60) # Ridotto a 60 secondi per test immediato
 def carica_dati(url):
     if "INCOLLA_QUI" in url or not url.startswith("http"):
         return pd.DataFrame()
     try:
         df = pd.read_csv(url)
-        
-        # Pulizia rigorosa dei nomi delle colonne
         df.columns = df.columns.str.strip().str.replace(r'\s+', ' ', regex=True)
         
-        # Funzione di pulizia numeri italiani (es. 4.005,52 -> 4005.52)
         def clean_italian_number(val):
             if pd.isna(val):
                 return 0.0
@@ -43,12 +38,10 @@ def carica_dati(url):
             except:
                 return 0.0
 
-        # Conversione automatica colonne numeriche
         for col in df.columns:
             if col not in ['Player First Name', 'Player Last Name', 'Player Position', 'Session Date', 'Drill Title', 'Giocatore']:
                 df[col] = df[col].apply(clean_italian_number)
 
-        # Pulizia e creazione nome giocatore
         if 'Player Last Name' in df.columns and 'Player First Name' in df.columns:
             df['Player Last Name'] = df['Player Last Name'].fillna('').astype(str).str.strip()
             df['Player First Name'] = df['Player First Name'].fillna('').astype(str).str.strip()
@@ -56,29 +49,34 @@ def carica_dati(url):
         else:
             df['Giocatore'] = "Atleta Sconosciuto"
             
-        # Rimuoviamo righe senza nome
         df = df[df['Giocatore'] != " "]
 
-        # Filtro intelligente e flessibile per i tempi (gestisce variazioni di spazi/parentesi)
         if 'Drill Title' in df.columns:
             df['Drill Clean'] = df['Drill Title'].astype(str).str.upper().str.replace(r'[^A-Z0-9]', '', regex=True)
-            # Accetta MATCH1, MATCH (1), MATCH1, ecc.
             df_match = df[df['Drill Clean'].isin(['MATCH1', 'MATCH2', 'MATCH (1)', 'MATCH (2)'])].copy()
-            # Uniformiamo l'etichetta grafica per i grafici
             df_match['Drill Title'] = df_match['Drill Clean'].apply(lambda x: 'MATCH (1)' if '1' in x else 'MATCH (2)')
         else:
             df_match = df.copy()
                 
         return df_match
     except Exception as e:
-        st.error(f"Errore durante l'elaborazione dei dati: {e}")
+        st.error(f"Errore di lettura: {e}")
         return pd.DataFrame()
 
 st.title("⚽ Dashboard Performance Fisica")
 st.markdown("---")
 
-with st.spinner('Sincronizzazione database in corso...'):
+with st.spinner('Sincronizzazione in corso...'):
     df_totale = carica_dati(URL_FOGLIO_GOOGLE)
+
+# --- PANNELLO DIAGNOSTICO (Ti dice esattamente cosa sta leggendo l'app) ---
+with st.expander("🛠️ Pannello di Controllo / Diagnostica Dati", expanded=True):
+    st.write(f"📊 **Righe totali lette dal Foglio Google:** `{len(df_totale)}`")
+    if not df_totale.empty and 'Session Date' in df_totale.columns:
+        date_trovate = df_totale['Session Date'].dropna().unique()
+        st.write(f"📅 **Date delle partite trovate nell'app:** {list(date_trovate)}")
+    else:
+        st.warning("⚠️ Nessuna colonna 'Session Date' trovata o dataframe vuoto.")
 
 if df_totale.empty:
     st.error("⚠️ Attenzione: Impossibile leggere il Foglio Google o il file è vuoto.")
@@ -88,7 +86,6 @@ else:
     # --- PAGINA 1: SINGOLA PARTITA ---
     if pagina == "📊 Analisi Singola Partita":
         st.sidebar.markdown("### Selezione Partita")
-        
         date_disponibili = sorted(df_totale['Session Date'].dropna().unique()) if 'Session Date' in df_totale.columns else []
         
         if len(date_disponibili) > 0:
@@ -97,12 +94,10 @@ else:
             
             st.subheader(f"Report Partita del {data_selezionata}")
             
-            # Ricerca automatica colonne
             col_distanza = next((c for c in df_match.columns if 'distance total' in c.lower() or 'distanza' in c.lower()), None)
             col_hsr = next((c for c in df_match.columns if 'high speed' in c.lower() or 'hsr' in c.lower()), None)
             col_speed = next((c for c in df_match.columns if 'max speed' in c.lower() or 'velocità' in c.lower()), None)
             
-            # --- SEZIONE KPI HIGHLIGHTS ---
             st.markdown("##### 🚀 Top Performers della Partita (Totale 1T+2T)")
             col1, col2, col3 = st.columns(3)
             
@@ -123,7 +118,6 @@ else:
                     
             st.markdown("---")
             
-            # --- GRAFICI PROFESSIONALI ---
             if col_distanza:
                 st.markdown("### 📊 Analisi Volumi (Somma 1T + 2T)")
                 fig_dist = px.bar(df_match, x='Giocatore', y=col_distanza, color='Drill Title', 
